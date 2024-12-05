@@ -1,0 +1,23 @@
+[project]
+name = "aoc"
+version = "0.1.0"
+description = "An MCP server for interacting with and solving the Advent of Code."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0.0",
+    "beautifulsoup4>=4.12.3",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+]
+
+[[project.authors]]
+name = "rictic"
+email = "rictic@gmail.com"
+
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
+
+[project.scripts]
+aoc = "aoc:main"
