@@ -32,13 +32,18 @@ class AocClient:
         return input_text
 
     def get_puzzle_text(self, day: int) -> str:
-        """Fetch the puzzle description."""
+        """Fetch the puzzle description for both parts if available."""
         response = self.session.get(f"{self.base_url}/{self.year}/day/{day}")
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, 'html.parser')
-        article = soup.find('article', class_='day-desc')
-        return article.get_text() if article else "Could not fetch puzzle text"
+        articles = soup.find_all('article', class_='day-desc')
+
+        if not articles:
+            return "Could not fetch puzzle text"
+
+        # Combine all puzzle parts into one string
+        return '\n\n'.join(article.get_text() for article in articles)
 
     def submit_answer(self, day: int, part: int, answer: str) -> str:
         """Submit an answer and return the response message."""
@@ -53,4 +58,4 @@ class AocClient:
 
         soup = BeautifulSoup(response.text, 'html.parser')
         message = soup.find('article').get_text()
-        return message.strip() 
+        return message.strip()
