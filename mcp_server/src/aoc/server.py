@@ -144,30 +144,31 @@ async def handle_call_tool(
                 text=True
             )
 
+            # Wait for completion with 15 second timeout
             try:
-                # Wait for completion with 15 second timeout
                 stdout, stderr = process.communicate(timeout=15)
             except subprocess.TimeoutExpired:
-                # Send SIGINT (Ctrl+C) first
-                process.send_signal(signal.SIGINT)
-                try:
-                    # Give it 5 seconds to clean up
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    # If it's still running, terminate forcefully
-                    process.kill()
+                # Check if process actually completed
+                if process.poll() is not None:
+                    # Process finished but communicate timed out, just get output
+                    stdout, stderr = process.communicate()
+                else:
+                    # Process is still running, need to terminate it
+                    process.send_signal(signal.SIGINT)
+                    try:
+                        process.wait(timeout=5)  # Give it 5 seconds to clean up
+                    except subprocess.TimeoutExpired:
+                        process.kill()  # Force kill if still running
+                    stdout, stderr = process.communicate()
+                    return [
+                        types.TextContent(
+                            type="text",
+                            text="Script execution timed out after 15 seconds and was terminated.\n\n"
+                                 f"Partial output:\n{stdout}\n\nErrors:\n{stderr}"
+                        )
+                    ]
 
-                # Collect any output that was generated before termination
-                stdout, stderr = process.communicate()
-                return [
-                    types.TextContent(
-                        type="text",
-                        text="Script execution timed out after 15 seconds and was terminated.\n\n"
-                             f"Partial output:\n{stdout}\n\nErrors:\n{stderr}"
-                    )
-                ]
-
-            # Process stdout for normal completion
+            # Format output (for both normal completion and clean timeout)
             stdout_lines = stdout.splitlines()
             if len(stdout_lines) > 100:
                 stdout_text = '\n'.join(stdout_lines[:50] +
