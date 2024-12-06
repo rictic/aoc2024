@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 from dotenv import load_dotenv
 import subprocess
+import signal
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent.parent.parent
@@ -130,29 +131,63 @@ async def handle_call_tool(
         if full_path.suffix != '.py':
             raise ValueError("Script must be a Python file")
 
-        # Run the script using uv with full path
         try:
-            result = subprocess.run(
+            # Start the process
+            process = subprocess.Popen(
                 ["/Users/rictic/.cargo/bin/uv",
                  "--directory",
                  str(aoc_root / "mcp_server"),
                  "run",
                  str(full_path)],
-                capture_output=True,
-                text=True,
-                check=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
+
+            try:
+                # Wait for completion with 15 second timeout
+                stdout, stderr = process.communicate(timeout=15)
+            except subprocess.TimeoutExpired:
+                # Send SIGINT (Ctrl+C) first
+                process.send_signal(signal.SIGINT)
+                try:
+                    # Give it 5 seconds to clean up
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    # If it's still running, terminate forcefully
+                    process.kill()
+
+                # Collect any output that was generated before termination
+                stdout, stderr = process.communicate()
+                return [
+                    types.TextContent(
+                        type="text",
+                        text="Script execution timed out after 15 seconds and was terminated.\n\n"
+                             f"Partial output:\n{stdout}\n\nErrors:\n{stderr}"
+                    )
+                ]
+
+            # Process stdout for normal completion
+            stdout_lines = stdout.splitlines()
+            if len(stdout_lines) > 100:
+                stdout_text = '\n'.join(stdout_lines[:50] +
+                                      ['\n... output truncated ...\n'] +
+                                      stdout_lines[-50:])
+            else:
+                stdout_text = stdout
+
             return [
                 types.TextContent(
                     type="text",
-                    text=f"Output:\n{result.stdout}\n\nErrors:\n{result.stderr}"
+                    text=f"Output:\n{stdout_text}\n\nErrors:\n{stderr}"
                 )
             ]
-        except subprocess.CalledProcessError as e:
+
+        except Exception as e:
             return [
                 types.TextContent(
                     type="text",
-                    text=f"Error running script:\nOutput:\n{e.stdout}\n\nErrors:\n{e.stderr}"
+                    text=f"Error running script: {str(e)}"
                 )
             ]
 
