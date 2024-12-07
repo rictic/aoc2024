@@ -15,6 +15,7 @@ from mcp.server import NotificationOptions, Server
 from pydantic import AnyUrl
 import mcp.server.stdio
 from utils.aoc_client import AocClient
+from .run_script import run_script
 
 # Load environment variables from project root
 load_dotenv(project_root / '.env')
@@ -119,56 +120,10 @@ async def handle_call_tool(
         if not script_path:
             raise ValueError("Missing path")
 
-        # Resolve and validate the path
-        aoc_root = Path("/Users/rictic/open/aoc2024")
-        full_path = (aoc_root / script_path).resolve()
-
-        # Ensure the path is within the AOC directory
-        if not str(full_path).startswith(str(aoc_root)):
-            raise ValueError(f"Script path must be within {aoc_root}")
-
-        # Ensure it's a .py file
-        if full_path.suffix != '.py':
-            raise ValueError("Script must be a Python file")
-
         try:
-            # Start the process
-            process = subprocess.Popen(
-                ["/Users/rictic/.cargo/bin/uv",
-                 "--directory",
-                 str(aoc_root / "mcp_server"),
-                 "run",
-                 str(full_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
+            stdout, stderr = run_script(script_path)
 
-            # Wait for completion with 15 second timeout
-            try:
-                stdout, stderr = process.communicate(timeout=15)
-            except subprocess.TimeoutExpired:
-                # Check if process actually completed
-                if process.poll() is not None:
-                    # Process finished but communicate timed out, just get output
-                    stdout, stderr = process.communicate()
-                else:
-                    # Process is still running, need to terminate it
-                    process.send_signal(signal.SIGINT)
-                    try:
-                        process.wait(timeout=5)  # Give it 5 seconds to clean up
-                    except subprocess.TimeoutExpired:
-                        process.kill()  # Force kill if still running
-                    stdout, stderr = process.communicate()
-                    return [
-                        types.TextContent(
-                            type="text",
-                            text="Script execution timed out after 15 seconds and was terminated.\n\n"
-                                 f"Partial output:\n{stdout}\n\nErrors:\n{stderr}"
-                        )
-                    ]
-
-            # Format output (for both normal completion and clean timeout)
+            # Format output
             stdout_lines = stdout.splitlines()
             if len(stdout_lines) > 100:
                 stdout_text = '\n'.join(stdout_lines[:50] +
